@@ -761,6 +761,10 @@ modified_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
 
 解决：模型上线前要确定推理数据的特征顺序与训练数据保持一致。
 
+12. 多方秘钥文件存储位置。
+
+解决：若需要用多方秘钥相关算法，包括训练和安全推理，安装client和coordinator服务的机器均需要提前创建“/export/Data”目录，用于存放pubKeyStr、privKeyStr公私秘钥文件。
+
 
 
 
