@@ -2,20 +2,20 @@
 
 - **version:0.9.1**
 
-Our system supply four part api sets, respectively are prepare, train, inference and system.
+Our system supply three part 5 subsection api sets, respectively are system, entity match and  train, inference and secure inference.
 
-interface details are list below 
+interface details are listed below 
 
-### 1. prepare (include psi and paramter query)
+### 1. system (include psi and paramter query)
 
 #### 1.1 common parameter query
-|Head|Protocol|HTTP|Path| /api/prepare/parameter/common |Type |POST|
+|Head|Protocol|HTTP|Path| /api/system/parameter/ |Type |POST|
 |-----|-----|-----|-----|-----|-----|-|
 |Request|名称 |类型	|含义	|是否必传	|长度	|备注	|
 || 无	| N/A | |N/A|N/A| |
 |Response|	名称	|类型	|含义	|是否必传|备注||
 ||code|	int|	status code	|Y	|||
-||data	|dict|	返回结果	|N|	||
+||data	|dict|	result	|N|	||
 ||status	|String| status describe |Y|	||
 
 Response example:
@@ -38,69 +38,81 @@ Response example:
 }
 ```
 
+#### 1.2  dataset and feature  name query
 
-#### 1.2 algorithm parameter query
+| 表头     | 协议   | HTTP   | 接口       | /api/system/dataset | 请求类型 | POST |
+| -------- | ------ | ------ | ---------- | ------------------------- | -------- | ---- |
+| 请求参数 | 名称   | 类型   | 含义       | 是否必传                  | 长度     | 备注 |
+|          | url    | String | 客户端地址 | Y                         | 80       |      |
+| 响应结果 | 名称   | 类型   | 含义       | 是否必传                  | 备注     |      |
+|          | code   | int    | 异常码     | Y                         |          |      |
+|          | data   | dict   | 返回结果   | N                         |          |      |
+|          | status | String | 状态码     | Y                         |          |      |
 
-|表头 |协议|HTTP|接口|/api/prepare/parameter/algorithm |请求类型  |POST|
-|-----|-----|-----|-----|-----|-----|-|
-|请求参数|名称 |类型	|含义	|是否必传	|长度	|备注	|
-||algorithmType	|String	|算法类型	|Y	|20||
-|响应结果|	名称	|类型	|含义	|是否必传|备注||
-||code|	int|	异常码	|Y	|||
-||data	|dict|	返回结果	|N|	||
-||status	|String|	状态码|Y|	||
+Request sample：
 
 ```json
 {
-    "algorithmType": "LinearRegression"
+    "url":"http://127.0.0.1:8094"
 }
 ```
 
-Response example:
+result example：
+
 ```json
 {
     "code": 0,
     "data": {
-        "algorithmParams":[
-			{
-                "field": "maxEpoch",
-                "name": "maxEpoch",
-                "describe": [
-                    "1",
-                    "1000"
-                ],
-                "type": "NUMS",
-                "defaultValue": 30.0
+        "list": [
+            {
+                "dataset": "reg0_train.csv",
+                "features": [
+                    {
+                        "name": "uid",
+                        "dtype": "float"
+                    },
+                    {
+                        "name": "HouseAge",
+                        "dtype": "float"
+                    },
+                    {
+                        "name": "y",
+                        "dtype": "float"
+                    }
+                ]
             },
             {
-                "field": "metricType",
-                "name": "metricType",
-                "describe": [
-                    "G_L2NORM"
-                ],
-                "type": "MULTI",
-                "defaultValue": "G_L2NORM"
-            },
-            {
-                "field": "optimizer",
-                "name": "optimizer",
-                "describe": [
-                    "BatchGD",
-                    "NEWTON"
-                ],
-                "type": "STRING",
-                "defaultValue": "BatchGD"
+                "dataset": "class0_train.csv",
+                "features": [
+                    {
+                        "name": "uid",
+                        "dtype": "float"
+                    },
+                    {
+                        "name": "job",
+                        "dtype": "float"
+                    },
+                    {
+                        "name": "poutcome",
+                        "dtype": "float"
+                    },
+                    {
+                        "name": "y",
+                        "dtype": "float"
+                    }
+                ]
             }
-      ]
+        ]
     },
     "status": "success"
 }
 ```
-type 共有三种，枚举型STRING，数值型NUMS，多选型MULTI
 
-#### 1.3 ID对齐
+### 2. match
 
-|表头|协议 | HTTP |  接口 | /api/prepare/match/start |请求类型  |POST|
+#### 2.1 start
+
+|表头|协议 | HTTP |  接口 | /api/match/start |请求类型  |POST|
 |-----|-----|-----|-----|-----|-----|-|
 |请求参数|名称 |类型	|含义	|是否必传	|长度	|备注	|
 ||taskId	|String	|任务id	|Y	|80||
@@ -143,8 +155,8 @@ type 共有三种，枚举型STRING，数值型NUMS，多选型MULTI
 }
 ```
 
-#### 1.4 ID对齐进度查询
-|表头 |  协议 | HTTP |接口| /api/prepare/match/progress |请求类型 |POST|
+#### 2.2 match progress
+|表头 |  协议 | HTTP |接口| /api/match/progress |请求类型 |POST|
 |-----|-----|-----|-----|-----|-----|-|
 |请求参数|名称 |类型	|含义	|是否必传	|长度	|备注	|
 ||matchId |String  |id匹配的算法|Y|40||
@@ -170,12 +182,12 @@ type 共有三种，枚举型STRING，数值型NUMS，多选型MULTI
   }
 }
 ```
-#### 1.5 ID对齐列表查询
-|表头 |  协议 | HTTP |接口| /api/prepare/match/list |请求类型 |POST|
+#### 2.3 ID对齐列表查询
+|表头 |  协议 | HTTP |接口| /api/match/list |请求类型 |POST|
 |-----|-----|-----|-----|-----|-----|-|
 |请求参数|名称 |类型	|含义	|是否必传	|长度	|备注	|
 ||taskList	|List	|任务名称	|Y	|10||
-||type	|String	|任务状态	|N	||不传时返回所有状态对齐任务[RUNNING,COMPLETE,FAIL]|
+||type	|String	|任务状态	|N 不传时返回所有状态对齐任务	||[RUNNING,COMPLETE,FAIL]|
 |响应结果|	名称	|类型	|含义	|是否必传|备注||
 ||code|	int|	异常码	|Y	|||
 ||data	|dict|	返回结果	|N|	||
@@ -215,8 +227,70 @@ type 共有三种，枚举型STRING，数值型NUMS，多选型MULTI
 }
 ```
 
-### 2. 训练过程  包括开始、停止、暂停、恢复训练和训练进度查询、训练详情查询等
-#### 2.1  启动训练
+### 3. 训练过程  包括开始、停止、暂停、恢复训练和训练进度查询、训练详情查询等
+
+#### 3.1 algorithm parameter query
+
+| 表头     | 协议          | HTTP   | 接口     | /api/train/option | 请求类型 | POST |
+| -------- | ------------- | ------ | -------- | ----------------- | -------- | ---- |
+| 请求参数 | 名称          | 类型   | 含义     | 是否必传          | 长度     | 备注 |
+|          | algorithmType | String | 算法类型 | Y                 | 20       |      |
+| 响应结果 | 名称          | 类型   | 含义     | 是否必传          | 备注     |      |
+|          | code          | int    | 异常码   | Y                 |          |      |
+|          | data          | dict   | 返回结果 | N                 |          |      |
+|          | status        | String | 状态码   | Y                 |          |      |
+
+```json
+{
+    "algorithmType": "LinearRegression"
+}
+```
+
+Response example:
+
+```json
+{
+    "code": 0,
+    "data": {
+        "algorithmParams":[
+			{
+                "field": "maxEpoch",
+                "name": "maxEpoch",
+                "describe": [
+                    "1",
+                    "1000"
+                ],
+                "type": "NUMS",
+                "defaultValue": 30.0
+            },
+            {
+                "field": "metricType",
+                "name": "metricType",
+                "describe": [
+                    "G_L2NORM"
+                ],
+                "type": "MULTI",
+                "defaultValue": "G_L2NORM"
+            },
+            {
+                "field": "optimizer",
+                "name": "optimizer",
+                "describe": [
+                    "BatchGD",
+                    "NEWTON"
+                ],
+                "type": "STRING",
+                "defaultValue": "BatchGD"
+            }
+      ]
+    },
+    "status": "success"
+}
+```
+
+type 共有三种，枚举型STRING，数值型NUMS，多选型MULTI
+
+#### 3.2  train start
 
 |meta |  协议 | HTTP  |  接口 | /api/train/start |请求类型  |POST|
 |-----|-----|-----|-----|-----|-----|-|
@@ -343,7 +417,7 @@ algorithmParams详情：
 }
 ```
 
-#### 2.2  单个训练进度和指标（包括训练完成和训练失败的任务也可以查询）
+#### 3.3  单个训练进度和指标（包括训练完成和训练失败的任务也可以查询）
 
 |表头 |  协议 | HTTP |  接口 | /api/train/status |请求类型  |POST|
 |-----|-----|-----|-----|-----|-----|-|
@@ -476,7 +550,7 @@ runningType 是枚举类型，共有 running, suspend, resume,  complete, stop, 
 message用来表示详细的运行信息，比如报错时 用来表示详细的报错信息。
 trainMetrics是训练指标统计，validationMetrics是验证指标统计。
 
-#### 2.3 单个训练完整训练参数，用于任务恢复，重进入等
+#### 3.4 单个训练完整训练参数，用于任务恢复，重进入等
 
 |表头 |  协议 | HTTP  |  接口 | /api/train/parameter |请求类型  |POST|
 |-----|-----|-----|-----|-----|-----|-|
@@ -523,7 +597,7 @@ trainMetrics是训练指标统计，validationMetrics是验证指标统计。
 }
 ```
 
-#### 2.4 训练任务列表
+#### 3.5 训练任务列表
 
 |表头 |  协议 | HTTP  |  接口 | /api/train/list |请求类型  |POST|
 |-----|-----|-----|-----|-----|-----|-|
@@ -617,8 +691,8 @@ trainMetrics是训练指标统计，validationMetrics是验证指标统计。
 ```
 
 
-### 3. 推理（包括模型查询，开始预测、进度查询等）
-#### 3.1 调用接口推理（同步接口）
+### 4. 推理（包括模型查询，开始预测、进度查询等）
+#### 4.1 调用接口推理（同步接口）
 
 |表头 |  协议 | HTTP  |  接口 | /api/inference/batch |请求类型  |POST|
 |-----|-----|-----|-----|-----|-----|-|
@@ -662,7 +736,7 @@ trainMetrics是训练指标统计，validationMetrics是验证指标统计。
 }
 ```
 
-#### 3.2 远端推理
+#### 4.2 远端推理
 
 |表头 |  协议 | HTTP  |  接口 | /api/inference/remote |请求类型  |POST|
 |-----|-----|-----|-----|-----|-----|-|
@@ -707,7 +781,7 @@ trainMetrics是训练指标统计，validationMetrics是验证指标统计。
 }
 ```
 
-#### 3.3 远端推理进度查询
+#### 4.3 远端推理进度查询
 
 |表头 |  协议 | HTTP  |  接口 | /api/inference/progress |请求类型  |POST|
 |-----|-----|-----|-----|-----|-----|-|
@@ -751,9 +825,7 @@ trainMetrics是训练指标统计，validationMetrics是验证指标统计。
 }
 ```
 
-
-### 4. 功能接口（包括各类参数查询、系统统计、监控等）
-#### 4.1删除已训练的模型
+#### 4.4删除已训练的模型
 
 |表头 |  协议 | HTTP  |  接口 | /api/system/model/delete |请求类型  |POST|
 |-----|-----|-----|-----|-----|-----|-|
@@ -780,72 +852,9 @@ trainMetrics是训练指标统计，validationMetrics是验证指标统计。
 
 注：此处删除模型为数据库model_table里面将该模型标记为删除，不再支持推理，但是客户端本地并未删除该模型文件。
 
-#### 4.2  数据集和特征查询
 
-|表头 |  协议 | HTTP |  接口 | /api/system/query/dataset |请求类型  |POST|
-|-----|-----|-----|-----|-----|-----|-|
-|请求参数|名称 |类型	|含义	|是否必传	|长度	|备注	|
-|| url |String	|客户端地址	|Y	|80||
-|响应结果|	名称	|类型	|含义	|是否必传|备注||
-||code|	int|	异常码	|Y	|||
-||data	|dict|	返回结果	|N|	||
-||status	|String|	状态码|Y|	||
 
-请求示例：
-```json
-{
-    "url":"http://127.0.0.1:8094"
-}
-```
-返回结果示例：
-```json
-{
-    "code": 0,
-    "data": {
-        "list": [
-            {
-                "dataset": "reg0_train.csv",
-                "features": [
-                    {
-                        "name": "uid",
-                        "dtype": "float"
-                    },
-                    {
-                        "name": "HouseAge",
-                        "dtype": "float"
-                    },
-                    {
-                        "name": "y",
-                        "dtype": "float"
-                    }
-                ]
-            },
-            {
-                "dataset": "class0_train.csv",
-                "features": [
-                    {
-                        "name": "uid",
-                        "dtype": "float"
-                    },
-                    {
-                        "name": "job",
-                        "dtype": "float"
-                    },
-                    {
-                        "name": "poutcome",
-                        "dtype": "float"
-                    },
-                    {
-                        "name": "y",
-                        "dtype": "float"
-                    }
-                ]
-            }
-        ]
-    },
-    "status": "success"
-}
-```
 ### appendix error code table
+
 #### 1
 

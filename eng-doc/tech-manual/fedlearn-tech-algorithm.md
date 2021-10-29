@@ -79,170 +79,163 @@ FederatedGB 框架中可以加入任意数量的客户端，每个客户端可�
 
 
 
-## 二、 联邦随机森林
+## 2. Faderated Learning Random Forest
 
-随机森林算法属于集成学习中的Bagging方法，其原理是通过随机选择特征和样本的方式，构建多棵决策树的方法完成决策。
+Random forest algorithm belongs to bagging method. Its principle is to construct multiple decision trees by randomly selecting features and samples.
 
-作为随机森林基础原子的决策树是一种很简单的算法，不仅解释性强，也符合人类的直观思维。这是一种基于if-then-else规则的有监督学习算法，下图展示了一个决策树的例子。
+As the basic atom of random forest, decision tree is a very simple algorithm, which is not only interpretable, but also in line with human intuitive thinking. This is a supervised learning algorithm based on if-then-else rules. The random forest model is composed of many decision trees. Each decision tree is completed independently by randomly sampled samples and features, and there is no explicit correlation between them. Therefore, for a random forest with N decision trees, it is necessary to synthesize N decision results to give the final prediction.
 
- ![图解决策树](./resource/rf1.png)
+###  2.1 Algorithm Process
 
- 
+The difference between the federated learning version of the random forest algorithm and the ordinary random forest is that the homologous encryption is used to ensure data transmission security between multiple parties, while the split point is selected in the form of local sorting of features and percentile partition to ensure that the distribution of features is not leaked.Other processes are consistent with ordinary random forest.
 
-随机森林模型由很多决策树构成的，每棵决策树都由随机采样的样本和特征独立完成，互相之间没有显式的关联。因此，有N棵决策树的随机森林，实际上需要综合N个决策结果给出最终的预测，这个综合往往是通过集成Bagging的方式实现的。比如，当我们进行分类任务时，新的输入样本进入，森林中的每一棵决策树分别进行判断和分类，每个决策树会得到一个自己的分类结果，决策树的分类结果中哪一个分类最多（Majority），那么随机森林就会把这个结果当做最终的结果；如果是回归问题的话，随机森林最后会选择每棵决策树的Mean Value作为最终预测值。
+ #### 2.1.1 Train Process
 
-
-
-###  2.1 算法流程
-
-联邦版本的随机森林算法相比单机实现的区别在于，采用了同态加密保证多参与方之间数据传输安全性，同时通过特征的本地排序+Percentile划分的形式选取分裂点保证特征的分布不会泄漏。其他流程和单机版本随机森林基本一致。
-
- #### 2.1.1 训练
-
-> 训练过程分为1个数据初始化和5个phase，
+> The training process is divided into one data initialization and five phases
 >
-> **数据初始化**: 协调方初始化随机森林树结构，并将用户选择的参数等发送给各个client，client根据传入的超参数，样本和特征采样和id等，再结合本地加载的数据，进行model 和 trainData的初始化， 返回是否初始化成功，此处不涉及从client端用户数据外传。
+> **Data initialization**: The coordinator sends the parameters selected by the user to each client. Each client initializes the model and traindata according to the incoming super parameters, samples, feature samples and sample IDs, combined with the locally loaded data. The active party additionally initializes the random forest tree model. Finally, each client returns whether the initialization is successful.
 >
-> **phase1**: 如果是主动方client首次执行phase1，将label进行加密，并将加密后的label和publickey发送给协调方。如果不是首次执行，协调方获取当前待分裂节点，获取待分裂节点包含的样本id发送给client，主动方client 根据label和样本落在的节点，计算当前指标并返回。
+> **phase1**: The coordinator initiated a new round of training. If the active client executes phase 1 for the first time, encrypt the label and send the encrypted label and public key to the coordinator. The active client calculates the current index according to the label and the node where the sample falls, and judges whether the node to be split meets the early end condition (according to the maximum depth of the tree and the minimum number of split samples of the node). If so, it is set as a leaf node. Otherwise, it returns the sample IDs of the node.
 >
-> **phase2**: 根据client回传的结果更新当前指标；判断待分裂节点是否满足提前结束条件（根据树的最大深度和节点的最小分裂样本数），如果满足则设为叶子结点，否则，发送节点的样本id到client；将获取的加密后的label发送到client。client将样本id对应数据按每个特征分别进行排序，排序后进行分桶，计算每个桶的同态加密后的label均值，最后将每个特征排序分桶后的结果返回。
+> **phase2**: The coordinator updates the current metrics according to the results returned by active client, and sends the sample IDs of the node to all parties; If it is executed for the first time, send the obtained encrypted label and public key to the passive party, and the passive party saves the encrypted label and public key. Each client sorts the data corresponding to the sample IDs according to each feature. After sorting, it divides the bucket, calculates the homomorphic encrypted label mean of each bucket, and finally returns the result of sorting each feature.
 >
-> **phase3**: 协调方将client方phase2返回的结果合并，发送到主动方。主动方client遍历所有的特征及所有的分割点，计算最佳分裂点，并返回。
+> **phase3**: The coordinator combines the results returned by Phase2 and sends them to the active party. The active client traverses all features and all segmentation points, calculates the best splitting point, and judges whether it can be split. If not, it is set as a leaf node. If it can, it sends the splitting point information to each client.
 >
-> **phase4**:  协调方根据client方phase3返回的结果，判断是否可以分裂，如果不可以则设为叶子结点，如果可以，将分裂点信息发送给每个client方。client方根据传入的分裂信息，计算出对应的分裂阈值，并将阈值存在本地，并返回其他分裂信息。
+> **phase4**:  The coordinator sends the information to each client. Each client calculates the corresponding splitting threshold according to the incoming splitting information, stores the threshold locally, and returns the splitting feature ID, splitting percentage, and samples of left and right child nodes after splitting.
 >
-> **phase5**：协调方的树模型写入分裂信息，并对生成左右子节点，将子节点置为待分裂节点。
+> **phase5**：The coordinator sends the information to the active party, the active party writes the splitting information in the tree model, generates the left and right child nodes, and sets the child nodes as the nodes to be split.
 
- #### 2.1.2 推理
+ #### 2.1.2 Inference Process
 
-> 推理过程分为2个phase
-> **phase1**： 协调方将需要推理的id发送给各个client，各个client根据id加载数据，同时client根据本地模型对应的节点，返回数据在对应节点的预测方向及叶子结点的值。
-> **phase2**： 协调方根据client返回的预测方向和最终落在的叶子结点值，得到最终的预测结果。
+> The inference process is divided into two phases
+> **phase1**：The coordinator sends the IDs to be inferred to each client. Each client loads data according to the IDs. At the same time, the client returns the predicted direction of the data at the corresponding node according to the node corresponding to the local model, and returns it to the coordinator. The active party obtains the value of the leaf node additionally.
+> **phase2**：The coordinator transmits the prediction direction returned by the passive party to the active party, and the active party obtains the final prediction result according to the value that finally falls on the leaf node.
 
 
-###  2.2 安全性
+###  2.2 Security
 
-#### 2.2.1 安全保护措施
+#### 2.2.1 Safety Protection Measures
 
-主要采用同态加密对有主动方的label信息进行保护，私钥保存在主动方。
+Homomorphic encryption is used to protect the label information with the active party, and the private key is saved in the active party.
 
-#### 2.2.2 支持的场景
+#### 2.2.2 Support Scenarios
 
-需将协调端和主动方部署在一起，防止被动方和协调端合谋，根据协调端全局变量中的模型和被动方特征推出主动方的label区间。其他情况下协调端和任意一方部署在一起或着单独部署均可以。后续修改为将模型在主动方维护后，可以任意方式部署。
+Support multiple deployments, including the deployment of the coordination end and either party together or separately.
 
-### 2.3 应用场景
+### 2.3 Application Environment
 
-联邦随机森林算法适用于垂直联邦学习场景，即各个客户端有大量的相同样本，而拥有不同的特征数据。在这一框架下，不存在客户端之间的直接交互，全部通过协调端进行。
+Federated learning random forest algorithm is suitable for vertical federated learning scenarios, that is, each client has a large number of the same samples and different characteristic data. In this framework, there is no direct interaction between clients, all through the coordination end.
+Federated random forest algorithm can support supervised numerical regression and binary classification problems. Due to homomorphic encryption, the multi classification problem cannot be realized under the premise of equal security.
+The federated random forest algorithm is applicable to multiple parties. Any number of clients can be added and owned by one party. In this case, one party can provide label data for joint training. In the training, no characteristic data will be transmitted, and only the encrypted label will be transmitted, without data leakage.
 
-联邦随机森林算法目前可以支持有监督的数值回归和二分类问题。多分类问题由于同态加密的原因，暂时无法在同等安全性的前提下实现。
+### 2.4 Parameter
 
-联邦随机森林算法适用于多方，可以加入任意数量的客户端，某一方拥有，在这种情况中，由一方提供标签数据即可进行联合训练，训练中不会传输任何的标签数据，不存在数据泄露的情况。
+| No.  | Parameter          | Illustration                  | Type    | Interval                                                     | Default value     |
+| ---- | ------------------ | ----------------------------- | ------- | ------------------------------------------------------------ | ----------------- |
+| 1    | numTrees           | Number of trees               | Integer | [1, 100]                                                     | 10                |
+| 2    | maxDepth           | Max size of tree depth        | Integer | [3, 10]                                                      | 15                |
+| 3    | maxTreeSamples     | Max size of data sample       | Integer | (0, 100000]                                                  | 1000              |
+| 4    | maxSampledFeatures | Max size of feature sample    | Integer | [1, 100]                                                     | 25                |
+| 5    | maxSampledRatio    | Feature sampled ratio         | Float   | (0, 1]                                                       | 0.6               |
+| 6    | numPercentiles     | Number of feature percentiles | Integer | [3, 100]                                                     | 30                |
+| 7    | minSamplesSplit    | Min size of samples split     | Integer | [1, 100]                                                     | 10                |
+| 8    | eval_metric        | Metrics                       | String  | {"RMSE", "AUC", "MAPE", "KS", "F1", "ACC", "RECALL","RAE","R2","RRSE","MSE", "PRECISION", "CONFUSION", "ROCCURVE", "KSCURVE", "TPR", "FPR"}, | {"RMSE"}          |
+| 9    | randomSeed         | Random seed                   | Integer | [1, 1000]                                                    | 666               |
+| 10   | encryptionType     | Encryption type               | String  | {"Paillier", "IterativeAffine"}                              | "IterativeAffine" |
+| 11   | cat_features       | Will be used in the future    | String  | {}                                                           | ""                |
 
-### 2.4 算法参数
+####   Parameter adjustment direction:
 
-| 序号 | 参数               | 说明                   | 类型   | 区间                                                         | 默认值            |
-| ---- | ------------------ | ---------------------- | ------ | ------------------------------------------------------------ | ----------------- |
-| 1    | numTrees           | 树的个数               | 数值型 | [1, 100]                                                     | 10                |
-| 2    | maxDepth           | 最大深度               | 数值型 | [3, 10]                                                      | 15                |
-| 3    | maxTreeSamples     | 一棵树最多sample样本数 | 数值型 | (0, 100000]                                                  | 1000              |
-| 4    | maxSampledFeatures | 最多sample特征数       | 数值型 | [1, 100]                                                     | 25                |
-| 5    | maxSampledRatio    | 特征采样比例           | 数值型 | (0, 1]                                                       | 0.6               |
-| 6    | numPercentiles     | 分位点个数             | 数值型 | [3, 100]                                                     | 30                |
-| 7    | minSamplesSplit    | 最少分裂样本数         | 数值型 | [1, 100]                                                     | 10                |
-| 8    | eval_metric        | 验证指标               | 字符型 | {"RMSE", "AUC", "MAPE", "KS", "F1", "ACC", "RECALL","RAE","R2","RRSE","MSE", "PRECISION", "CONFUSION", "ROCCURVE", "KSCURVE", "TPR", "FPR"}, | {"RMSE"}          |
-| 9    | randomSeed         | 随机种子               | 数值型 | [1, 1000]                                                    | 666               |
-| 10   | encryptionType     | 加密方式               | 字符型 | {"Paillier", "IterativeAffine"}                              | "IterativeAffine" |
-| 11   | cat_features       | 目前尚未生效           | 字符型 | {}                                                           | ""                |
-
-####   整体调参方向：
-
-由于随机森林的特性（bagging，即有多个独立的模型进行预测，最后以某种方式进行聚合操作，如平均，中位数等），在建模的时候建议根据数据集选择合适的每棵树样本采样数和特征采样比例，并通过设置一定量的树的个数（如10，15，100等），树的深度（如3，5，7等），分位点个数（10，30，100等），最少分裂样本数（30，50，100等）对整个模型的拟合效果进行校正，防止欠拟合或过拟合。
+During modeling, it is recommended to select the appropriate number of samples and feature sampling proportion of each tree according to the data set, and correct the fitting effect of the whole model by setting a certain numTrees (such as 10, 15, 30, etc.), maxDepth (such as 3, 5, 7, etc.), numPercentiles (such as 10, 30, 100, etc.) and minSamplesSplit (such as30, 50 ,100, etc.).
 
 
 
-## 三、 分布式版联邦随机森林
+## 3. Distributed Federated Learning Random Forest
 
-分布式版联邦随机森林在联邦随机森林的基础上进行了分布式改造。由于随机森林的每棵树具有独立性，因此，通过分布式把随机森林的树拆分成n个任务，交给各个worker分别执行，每个任务只需加载对应树需要的数据，而不是全量数据，降低了单台机器的内存消耗，摆脱了单台机器内存不足对训练数据样本量的限制。
+The distributed federated learning random forest is transformed on the basis of the federated learning random forest. Due to the independence of each tree of the random forest, the tree of the random forest is divided into N tasks through distribution and handed over to each worker for execution. Each task only needs to load the data required by the corresponding tree, not the full amount of data, which reduces the memory consumption of a single machine and gets rid of the limitation of the insufficient memory of a single machine on the sample size of training data.
 
-###  3.1 算法流程
-分布式版本联邦随机森林算法相比标准版联邦版随机森林实现的区别在于：在初始化阶段，需要根据参数选择的树的棵数，初始化n个模型，分别只加载采样后的数据。在训练过程中，收到协调方请求后，将请求按每棵树进行拆分，分解为n个任务，交给各个worker并行执行，任务执行完后，将模型存储到manager本地，并将返回结果合并后，传回协调方。其他流程和标准版联邦随机森林基本一致。
+###  3.1 Algorithm Process
 
-###  3.2 安全性
-分布式版联邦随机森林可以理解为将某一方的client拆分为一个manager和多个worker。manager和worker之间的交互均在该方的内部进行，不会泄漏给协调方或者其他client方。各个client方与协调方之间的安全性与标准版联邦随机森林一致。
+The difference between the distributed version and the standard version is that in the initialization stage, N models need to be initialized according to the number of trees selected by parameters, and only the sampled data is loaded respectively. In the training process, after receiving the coordinator's request, the request is divided into n tasks according to each tree and handed over to each worker for parallel execution. After the task is executed, the model is stored locally, and the returned results are combined and returned to the coordinator. Other processes are basically consistent with the standard version.
 
-### 3.3 应用场景
-分布式版联邦随机森林解决了单台机器内存不足导致的训练数据样本量的限制，适用于多台小内存机器的场景。其他与标准版联邦随机森林一致。
+###  3.2 Security
 
-### 3.4 算法参数
-目前分布式版联邦随机森林加密方式只支持Paillier，其他与标准版联邦随机森林一致。
+The distributed version can be understood as splitting a client into one manager and multiple workers. The interaction between manager and worker is carried out within the party and will not be disclosed to the coordinator or other clients. The security between each client and the coordinator is consistent with the standard version.
+
+### 3.3 Application Environment
+
+The distributed federal random forest solves the limitation of training data sample size caused by insufficient memory of a single machine, and is suitable for the scenario of multiple small memory machines. Others are consistent with the standard version.
+
+### 3.4 Parameter
+
+The distributed version is consistent with standard version.
 
 
+## 4. Federated Learning Kernel
 
-## 四、 联邦核算法
-
-机器学习中有一类支持向量机算法 (SVM)，常见于二分类建模的场景中，它 的基本模型是定义在特征空间上的间隔最大的线性分类器，间隔最大使它有别于 感知机。SVM 的的学习策略就是间隔最大化，可形式化为一个求解凸二次规划的 问题，也等价于正则化的合页损失函数的最小化问题。SVM 的的学习算法就是求 解凸二次规划的最优化算法。然而原始的 SVM 其实无法处理线性可分的问题，需 要配合核函数变换处理非线性可分的场景。
-核方法，以支持向量机和核主分量分析为例，是建立在再生核希尔伯特空间特 性的基础上的。以支持向量机和核主分量分析为例，对于一个半正定核函数 K(通 常也被称为 Mercer 核)，我们可以找到有一个特征映射 φ, 将一个样本投影到再生 希尔伯特空间中
+There is a type of support vector machine algorithm (SVM) in machine learning, which is commonly used in binary classification. Its basic model is a linear classifier with the largest interval defined in the feature space. The largest interval makes it different from perceptrons. The learning strategy of SVM is to maximize the interval, which can be formalized as a problem of solving convex quadratic programming, which is also equivalent to the problem of minimizing the regularized hinge loss function. The learning algorithm of SVM is the optimal algorithm for solving convex quadratic programming. However, the original SVM can't actually handle the linearly separable problem, and it needs to cooperate with the kernel function transformation to handle the non-linearly separable scene.
+Kernel methods, such as support vector machines and kernel principal component analysis, are based on the properties of regenerated kernel Hilbert Spaces. Taking support vector machines and kernel principal component analysis as an example, for a semi-positive definite kernel function K(commonly known as Mercer's kernel), we can find that there is an eigenmap φ that projects a sample into a regenerated Hilbert space.
 $$
 k(x, y) =< φ(x), φ(y) >
 $$
-由于 φ 是一个高维映射，这给核变换在实际问题中的使用带来了障碍。因此，我们采用了近似核变换的方法使得核映射实用化。 
+Since φ is a high-dimensional mapping, this brings obstacles to the use of kernel transforms in practical problems. Therefore, we adopted an approximate kernel transformation method to make the kernel mapping practical.
 
-近似核变换是通过按照某种概率随机生成一个变换矩阵
+The approximate kernel transformation is to randomly generate a transformation matrix according to a certain probability, W = [w<sub>1</sub>, w<sub>2</sub> , ... , w<sub>m</sub>], w<sub>i</sub> ∈R<sup>d</sup> , where m represents the number of basis functions, and d represents the original feature dimension. And a bias vector b∈R<sup>d</sup>.
+
+Taking the RBF kernel function used in the current system as an example, for the sample x∈R<sup>d</sup>, its approximate kernel mapping can be expressed as
 $$
-W = [w1,w2,...,wm],wi ∈ Rd
+φ(x) = [z1(x), z2(x), ..., zm(x)], zi(x) = \sqrt{2γ} cos(wi⊤x + bi) (1)
 $$
-其中m代表基函数个数，d代表原始特征维数。以及一个偏置向量b∈R .
-以目前系统中采用的 RBF 核函数为例，对于样本 x ∈ Rd, 它的近似核映射可 以表示为
-$$
-φ(x) = [z1(x), z2(x), ..., zm(x)], zi(x) = 􏰇2γ cos(wi⊤x + bi) (1)
-$$
-其中 γ 参数需要人工设置，wi 中每个元素符合高斯分布 N (0, 1)， bi 中每个元素 符合均匀分布 [0, 2π]，达成实质上的“低维升高维”的效果，从而通过核函数变换 的技巧将 SVM 变为实质上的非线性分类器，从而支持非线性可分的复杂场景。同 时，由于每个样本采用了随机矩阵乘法、加随机向量和余弦变换对样本做了处理， 这些数据变换方法能充分起到保护原始数据的作用。
-### 4.2 算法流程
-以下是系统算法的流程. ![核算法流程图](./resource/kernel.png)
-### 4.2 安全性
-#### 4.2.1 安全保护措施
+The γ parameter needs to be manually set, and each element in  w<sub>i</sub> conforms to the Gaussian distribution N(0, 1), and each element in b<sub>i</sub> conforms to the uniform distribution [0, 2π], achieving the effect of "lower dimension and higher dimension". So as to turn the SVM into a substantial non-linear classifier through the technique of kernel function transformation, so as to support non-linear separable complex scenes. At the same time, because each sample is processed by random matrix multiplication, random vector addition and cosine transformation, these data transformation methods can fully protect the original data.
 
-​		联邦核算法由于每个样本采用了随机矩阵乘法、加随机向量和余弦变换对样本做了处理，这些数据变换方法能充分起到保护原始数据的作用，无需采用同态加密对数据进行额外加密。
+### 4.1 Process of algorithm 
 
-​        但是在联邦建模过程中，客户端需要将本地的预测值回传至协调端，若当前客户端无特征，仅包含目标值情况下，由于未对目标值做变换，当前客户端存在数据泄露的安全隐患，此时需要协调端与当前客户端在同一方以保证数据安全性。
+The following is the flow chart of the algorithm. ![核算法流程图](./resource/kernel.png)
 
-#### 4.2.2 支持的场景
+### 4.2 Algorithmic Security
 
-​		联邦核算法支持多方建模，每个客户端拥有部分特征数据，其中一方拥有标签数据，各参与方地位平等，均可发起任务共同完成模型的构建。但是当拥有label方的客户端仅有label时，需要改客户端与协调端不是在一起以保证数据安全性。
+#### 4.2.1 Safety protection measures
 
-​         联邦核算法目前支持回归、二分类和多分类问题。
+In the federated kernel algorithm, each sample is processed by random matrix multiplication, random vector addition and cosine transformation. These data transformation methods can fully protect the original data without the need for additional encryption of data using homomorphic encryption.
 
-### 4.3 算法应用场景
+However, in the process of federated modeling, the client needs to return the local predicted value to the coordinator. If the current client has no characteristics and only contains the target value, since the target value is not transformed, the current client has data leakage At this time, the coordinator and the current client need to be on the same side to ensure data security.
 
-核函数变换是机器学习中被广泛使用的一种算子，在经典 SVM 算法中通过将低维特征映射到高维核空间，可以实现原始线性不可分数据样本的分类模型，对于回归问题，目前的算法尚未证明可以有比肩其他算法的性能;但对于大多数的分类问题，尤其时二分类问题会有非常不错的效果。核算法目前主要支持二分类和多分类模型训练和预测任务。在使用前, 数据需先进行归一化预处理。
-**数据规模**
-核算法模型通过核变换的方法转换样本特征并加密，并且我们已经在算法中实现了 Batch 批处理功能，目前在 4G 左右的内存限制的情况下可以高效支持 50W 级别的样本数量和 200 维左右的特征维度，机器配置支持的话，单台机器预计最多 可以支持百万级别一千左右特征维度的训练数据，更大的数据集的训练会在后续的分布式版本中给予支持。
-**时间开销**
-得益于核变换的数学优化，核算法的运行效率非常高。算法的时间开销主要和以下几个参数相关:核空间的维度，样本数量。目前在已有的 44W 样本 118 维 特征数据集上的测试结果，训练收敛时间可以控制在 40 分钟以内，非常适合迅速 完成新任务或者数据集上的benchmark 并快速配合 Feature engineering 进行迭代。
-**性能数值**
-核算法在训练时不仅速度快，鲁棒性强，同时推理过程也不需要按照深度多次转变参与方，因此训练集性能和测试集性能差别较小，推理时可能产生的误差范围有比较好的预期。
+#### 4.2.2 Supported Scenarios
 
-### 4.4 算法参数
-目前提供了如下几个参数供调整:
-• batch size: 该参数是程序为处理大批量数据所预留的一个参数。通过设置
-batch size 大小，算法每次会将数据分批处理。线下实验表明，batch size 大小 对精度有一定影响。当然大到一定程度后精度因此而带来的提升有限。默认设大一些。
-• scale: 这个参数对应的是公式 1 中的 γ。这个值和模型性能关系较大，需要
-根据数据集调整;
-• mapdim: 对应核映射维度空间，也就是公式 1 中的 m;
-• maxIter :模型训练通信次数。
+The Federal kernel method supports multi-party modeling. Each client owns part of the characteristic data, and one party owns the label data. All participants have equal status and can initiate tasks to jointly complete the model construction. However, when the client that owns the label side only has the label side, the client and the coordinator need to be deployed together to ensure data security.
+
+The federated kernel algorithm currently supports regression, binary classification and multi-classification problems.
+
+### 4.3 Application scenarios
+
+Kernel function transformation is a widely used operator in machine learning. In the classic SVM algorithm, by mapping low-dimensional features to high-dimensional kernel space, the classification model of original linear inseparable data samples can be realized. For regression problems, the current The algorithm has not proven to be comparable to other algorithms in performance. But for most classification problems, especially two classification problems, there will be very good results. The kernel algorithm currently mainly supports two-class and multi-class model training and prediction tasks. Before use, the data needs to be normalized and preprocessed.
+**Data size**
+The kernel algorithm model converts the sample features and encrypts them through the method of kernel transformation, and we have implemented the Batch processing function in the algorithm. At present, under the memory limit of about 4G, it can efficiently support the number of samples of 50W and the number of samples of about 200 dimensions. Feature dimensions, if the machine configuration supports it, a single machine is expected to support up to one million training data of about one thousand feature dimensions. The training of larger data sets will be supported in subsequent distributed versions.
+**Time overhead**
+Thanks to the mathematical optimization of the nuclear transformation, the operating efficiency of the nuclear algorithm is very high. The time cost of the algorithm is mainly related to the following parameters: the dimensionality of the kernel space and the number of samples. At present, the test results on the existing 44W sample 118-dimensional feature data set, the training convergence time can be controlled within 40 minutes, which is very suitable for quickly completing new tasks or benchmarks on the data set and quickly cooperating with Feature engineering for iteration.
+**Performance Value**
+The kernel algorithm is not only fast and robust during training, but the reasoning process does not need to change the participants multiple times according to the depth. Therefore, the performance of the training set and the performance of the test set are small, and the error range that may be generated during inference is relatively good expectations.
+
+### 4.4 Algorithm parameters
+
+Currently, the following parameters are provided for adjustment:
+• batch size: This parameter is a parameter reserved by the program for processing large batches of data. By setting the batch size, the algorithm will process the data in batches each time. Offline experiments show that the batch size has a certain impact on accuracy. Of course, the increase in accuracy brought about by this is limited when it reaches a certain level. Set a larger value by default.
+• scale: This parameter corresponds to γ in formula 1. This value has a large relationship with model performance and needs to be adjusted according to the data set;
+• mapdim: Corresponding to the kernel mapping dimension space, which is m in formula 1;
+• maxIter: the number of communications for model training.
 
 具体参数如下：
 
-| id   | <span style="display:inline-block;width:40px">参数</span> | <span style="display:inline-block;width:200px">参数说明</span> | <span style="display:inline-block;width:60px">类型</span> | <span style="display:inline-block;width:100px">参数区间</span> |    默认值     |
-| ---- | :-------------------------------------------------------: | :----------------------------------------------------------: | :-------------------------------------------------------: | :----------------------------------------------------------: | :-----------: |
-| 1    |                         batchSize                         |                           分批大小                           |                          数值型                           |                       （1000,5000000）                       |     10000     |
-| 2    |                           scale                           |                        核变换尺度参数                        |                          数值型                           |                        (0.000001, 1)                         |      0.1      |
-| 3    |                           seed                            |                            种子点                            |                          数值型                           |                           (0,2000)                           |      100      |
-| 4    |                          mapdim                           |                        核函数映射维数                        |                          数值型                           |                           (0,1000)                           |      400      |
-| 5    |                          maxIter                          |                         训练迭代次数                         |                          数值型                           |                          (10,1000)                           |      100      |
-| 6    |                        metricType                         |               模型评估指标，目前包括RMSE,AUC等               |                          枚举型                           |                   ["RMSE","AUC","ACC",...]                   | ["TRAINLOSS"] |
-| 7    |                         numClass                          |                           类别数量                           |                          数值型                           |                           类别数量                           |   2或类别数   |
-| 8    |                    differentialPrivacy                    |                         差分隐私程度                         |                          数值型                           |                            (0, 1)                            |       0       |
+| id   |      parameter      | <span style="display:inline-block;width:200px">Parameter Description</span> |       Type       | <span style="display:inline-block;width:100px">Parameter interval</span> | default value |
+| ---- | :-----------------: | :----------------------------------------------------------: | :--------------: | :----------------------------------------------------------: | :-----------: |
+| 1    |      batchSize      |                          batch Size                          |     numeric      |                       （1000,5000000）                       |     10000     |
+| 2    |        scale        |               Kernel transform scale parameter               |     numeric      |                        (0.000001, 1)                         |      0.1      |
+| 3    |        seed         |                         random sedd                          |     numeric      |                           (0,2000)                           |      100      |
+| 4    |       mapdim        |                   Kernel mapping dimension                   |     numeric      |                           (0,1000)                           |      400      |
+| 5    |       maxIter       |                Number of training iterations                 |     numeric      |                          (10,1000)                           |      100      |
+| 6    |     metricType      | Model evaluation indicators, currently including RMSE,AUC, etc | Enumeration type |                   ["RMSE","AUC","ACC",...]                   | ["TRAINLOSS"] |
+| 7    |      numClass       |                     Number of categories                     |     numeric      |                         type number                          |       1       |
+| 8    | differentialPrivacy |                Differential degree of privacy                |     numeric      |                            (0, 1)                            |       0       |
 
 
 
@@ -343,3 +336,63 @@ batch size 大小，算法每次会将数据分批处理。线下实验表明，
 | 6    |                         maxEpoch                          |                           迭代次数                           |                          数值型                           |                        （100-10000）                         |   300    |
 | 7    |                      regularization                       |                          正则化类型                          |                          枚举型                           |                         ["L1","L2"]                          |   "L1"   |
 | 8    |                          lambda                           |                          正则化参数                          |                          数值型                           |                            (0,1)                             |  0.001   |
+
+
+
+## Federated MixGBoost
+
+MixGBoost is an extended algorithm of FederatedGB. MixGBoost is not only suitable for vertical data scenarios, but also for horizontal data scenarios and data scenarios composed of horizontal and vertical data. Users do not need to judge whether to apply horizontal or vertical learning algorithms based on experience, nor do they need to perform strict horizontal or vertical filtering of data. In this way, the cost of data preprocessing is saved, and the data of each participant is also fully utilized.
+
+## 7.1 Algorithm Details
+
+### 7.1.2 Training
+
+Compared with federatedGB, MixGBoost accepts the distribution of label data in multiple parties and the repeated existence of labels, so it adds a global gradient update step. When calculating the best features of node splitting, two methods of horizontal and vertical learning are combined, and two split candidates, horizontal and vertical, are calculated for the divided data, and finally a splitting decision is made.
+
+In MixGBoost, the training process of each tree includes the following steps:
+
+1. Global gradient update among participants.
+2. Tree growth. The split of each tree node goes through three steps:
+    (1) Calculating horizontal spliting candidate
+    (2) Calculating vertical spliting candidate
+    (3) Split decision
+3. After a tree has grown, update the sample prediction value and the training metrics, and then continue the training of the next tree.
+
+### 7.1.3 Model Storage and Inference
+
+After the training is completed, the storage and use of MixGBoost is also different from that of FederatedGB. In FederatedGB, the complete tree structures are stored on the active participant, and the split information of different nodes is stored on its corresponding participant. Before the inference starts, the active participant sends the tree structure back to the server, and the server presides over the inference process and asks the participant where the current node is located. Conversely, MixGBoost stores the tree structures separately on multiple participants, and each participant saves substructures of the boosted trees and the node split information it owns. Before the inference starts, the tree substructures from participants are gathered on the server to reconstruct the complete tree structures, and the server also presides the inference process.
+
+### 7.2 Security
+
+MixGBoost is safe against the **semi-honest model**. In the training process, MixGBoost uses homomorphic encryption to encrypt the gradient update values, and the coordinator will receive the encrypted data from each participants. To prevent the participants from colluding with the coordinator, the coordinator cannot be deployed with any participant.
+
+After the training is completed, the tree structures are stored separately on multiple participants, and the information of each node is saved according to the participant where its split feature is located. In order to prevent a participant from approximately inferring the label values of other participants through the weight of leaf nodes, MixGBoost requires that any participant without label data cannot save a complete tree path. If all intermediate node split information on a path is stored on a certain client, then the final leaf node weight of the path will be randomly stored on another participant with label data.
+
+### 7.3 Supporting scenarios
+
+MixGBoost is suitable for data scenarios composed of various degrees of horizontal and vertical overlapping data. In the extreme case where the proportion of overlapping data is almost zero, MixGBoost can also ensure that the process of joint training is not interrupted, and output a complete usable model. The same applies to complete horizontal or vertical data inputs.
+The labels of the training samples exist in at least one participant, otherwise the sample will be regarded as an invalid training sample. 
+
+### 7.4 Parameter Description
+
+
+| id   |      parameter      | <span style="display:inline-block;width:200px">Parameter Description</span> |       Type       | <span style="display:inline-block;width:100px">Parameter interval</span> | default value |
+|  ---- | ---- |----|----|----| ------- |
+|1|trainingEpoch|Number of training rounds|Numeric|（1, 5）|1|
+|2|maxTreeNum|Maximum number of trees|Numeric|（1, 100）|30|
+|3|verticalFeatureSampling|Random feature selection ratio for calculating vertical splitting candidate|Numeric|（0.0, 1.0）|0.8|
+|4|horizontalFeaturesRatio|Random feature selection ratio for calculating horizontal splitting candidate|Numeric|（0.0, 1.0）|0.8|
+|5|needVerticalSplitRatio|The lowest proportion of common samples using only the vertical splitting candidate|Numeric|（0, 1）|0.98|
+|6|maxBinNum|Number of feature buckets|Numeric|（32, 50）|32|
+|7|earlyStoppingRound|Number of early stop rounds|Numeric|（1, 20）|10|
+|8|minSampleSplit|The minimum number of samples required to split an internal node (non-leaf node)|Numeric|（1, 20）|10|
+|9|lambda|L2 regularization weight term, the larger the value, the more conservative the model|Numeric|（1, 20）|1|
+|10|gamma|The minimum value of the loss reduction required by a node to branch, the larger the value, the more conservative the model|Numeric|（0,1）|0|
+|11|eta|In order to prevent over-fitting in the learning tree, the shrinkage step used in the update process|Numeric|(0.01, 1)|0.3|
+|12|numClass|Number of multi-class task categories|Numeric|（1, 1000）|1|
+|13|evalMetric|Model evaluation indicators, currently including MSE, MAE, RMSE and MAPE|Enumeration type|{"mse", "mae", "rmse", "mape"}|"rmse"|
+|14|maxDepth|Maximum tree depth, reasonable tree depth can prevent overfitting|Numeric|(5, 20)|7|
+|16|loss|Loss calculation method, currently supports classification（"reg:logistic"，"binary:logistic"）and regression（"reg:square"）tasks|Enumeration type|{"reg:logistic","reg:square","binary:logistic"}|"reg:square"|
+|17|catFeatures|Marking discrete features, not yet supported|String|{}|" "|
+|18|bitLength|Ciphertext length|Numeric|{512, 1024})|1024|
+
