@@ -6,15 +6,14 @@ fedlearn docs | 联邦学习文档
 2. 技术手册：主要是京东科技联邦学习系统架构设计和算法基本原理。
 3. 用户手册：，主要是联邦学习平台安装部署和界面操作解释。
 4. 接口文档
->    - 系统HTTP 接口
->    - 客户端HTTP 接口
+>    - 系统对外HTTP接口
 >    - 算法函数接口
->    - 系统内部接口
+>    - 系统内部API接口
 5. 开发者文档，包括开发者工具集和开发指南等
 
  ------
 
- include document for user and developer, 
+ this docs including documents for users and developers, 
 1. whitepaper,
 2. technical manual
 3. user manual
